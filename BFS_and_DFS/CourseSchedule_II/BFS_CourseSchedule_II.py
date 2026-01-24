@@ -31,7 +31,7 @@ class Solution:
         else:
             return order
         
-        
+    
 """
 ### Kahn's Algorithm
 1. 建立一個 graph, {Node : [Neighibor]}
@@ -39,4 +39,5 @@ class Solution:
 3. 建立一個 Queue, 用於 bfs, 並將 indegree 讀入作為初始節點
 4. 建立 count 變數, 用於計算成功的課數
 5. Queue 的值都是 indegree = 0 的數, 所以 pop 出來並計算
+6. 這是基於 CourseSchedule 的 follow up question, 可以使用新的 List 紀錄修課
 """

@@ -1,89 +1,96 @@
-### 1. 題目敘述與抽象概念
+### 1. 核心題意與挑戰
 
-**題目描述**：將單向鏈結串列  重新排列為 。
-**抽象概念**：
+給定一個單向鏈結串列：`L0 → L1 → … → Ln-1 → Ln`
+將其重新排列後變為：`L0 → Ln → L1 → Ln-1 → L2 → Ln-2 → …`
+**不能只是改變節點內部的值**，而是需要實際進行節點指標的重整。
 
-* **「拉鍊式重組」**：將一條長鏈從中間剪斷，將後半段反轉，最後像拉鍊齒一樣交錯扣合。
-* **核心三要素**：
-1. **中點定位**：區分前半段與後半段。
-2. **方向重構**：將後半段「車頭調轉」。
-3. **交錯縫合**：將兩條鏈合併。
-
-
-
-**Tag**: `Linked List`, `Two Pointers`, `Reverse List`, `In-place`.
+* **隱藏挑戰**：
+  * 單向鏈結串列無法「從尾巴走回來」，所以不可能直觀地一前一後交替取用。
+  * 這題其實是前面三個 Linked List 基礎題型的**大魔王綜合體**！必須將這道題拆解。
 
 ---
 
-### 2. 算法比較（Lean Hire vs. Strong Hire）
+### 2. 解法對比與完整程式碼
 
-| 維度 | 暴力解 (Array/Stack) | **最優解 (In-place Manipulation)** |
-| --- | --- | --- |
-| **策略** | 存入陣列後用雙指針重組。 | **快慢指針找中點 + 反轉後半部 + 交錯合併。** |
-| **時間複雜度** |  |  |
-| **空間複雜度** |  | **** |
-| **評價** | 簡單但消耗記憶體。 | **Strong Hire：展現對指標與記憶體的高效掌控。** |
+#### A. O(N) 空間解法 (Array 中繼法)
 
----
+**思路**：把所有節點裝進一個 Python 的 `List` (陣列) 中。既然變成陣列了，我們就可以輕鬆透過雙指針 (`left=0, right=len-1`) 一頭一尾地交替修改 `next` 連結。
+* **缺點**：使用了 $O(N)$ 的額外空間，面試官一定會要求你做到 In-place 修改 ($O(1)$ 空間)。
 
-### 3. 微系統設計與產業應用
+#### B. 三步拆解法 (Find Mid -> Reverse -> Merge) —— **展現基本功的唯一正解**
 
-* **數據交織 (Data Interleaving)**：
-在數位通訊或音訊/影像編碼中，為了對抗**突發性錯誤 (Burst Errors)**，會使用類似的交錯算法。如果傳輸中發生連續丟包，交錯後的數據在解碼還原時，錯誤會被分散（分散到不同的時間點或影像幀），進而讓修復算法（如 ECC）更容易找回遺失資訊。
-* **緩衝區優化 (Buffer Reordering)**：
-在底層驅動開發中，為了符合特定硬體的讀取順序，常需要在不額外申請記憶體（In-place）的情況下重新排列資料塊。
+**思路**：
+如果把題目畫出來，其實就是要拿「前半段」加上「反轉過後的後半段」進行交錯編織。
+1. **快慢指針找中點** (龜兔賽跑找中位數)
+2. **反轉後半段** (Reverse Linked List)
+3. **交錯合併兩個串列** (Merge Two Sorted Lists 變形)
 
----
-
-### 4. 程式碼模板與 Dry Run (以 `1->3->5->7->9` 為例)
+這三個步驟各佔一部份常數級別的時間 $O(N)$，總體仍為 $O(N)$，且空間複雜度 $O(1)$！
 
 ```python
 class Solution:
     def reorderList(self, head: Optional[ListNode]) -> None:
-        if not head or not head.next: return
-
-        # 1. 找中點 (Fast pointer 從 head.next 開始，確保 slow 停在前半段結尾)
-        slow, fast = head, head.next
+        """
+        Do not return anything, modify head in-place instead.
+        """
+        if not head or not head.next:
+            return
+            
+        # 步驟一：快慢指針找鏈結中點
+        slow, fast = head, head
         while fast and fast.next:
             slow = slow.next
             fast = fast.next.next
-
-        # 2. 切斷與反轉 (物理意義：拔掉掛鉤，調轉車頭)
-        curr = slow.next
-        slow.next = None  # 重要！切斷前半段，防止環產生
+            
+        # 步驟二：反轉後半段 (slow 之後的節點)
+        # 這裡的邏輯等同於 Reverse Linked List 基礎題
         prev = None
+        curr = slow.next
+        # 將前半段與後半段切斷連結，否則會形成環！
+        slow.next = None
+        
         while curr:
-            next_tmp = curr.next
+            next_node = curr.next
             curr.next = prev
             prev = curr
-            curr = next_tmp
+            curr = next_node
+            
+        # 此時 prev 是反轉後那段的頭節點
         
-        # 3. 交錯合併 (while second 決定邊界)
-        first, second = head, prev
-        while second:
-            first_tmp_next = first.next
-            second_tmp_next = second.next
+        # 步驟三：交錯合併前半段與後半段
+        first = head
+        second = prev # 反轉過後的下半部
+        
+        while second: # 因為 second 的長度會等於或少1於 first，所以用 second 判斷即可
+            # 暫存兩者的下一個節點
+            tmp1, tmp2 = first.next, second.next
             
+            # 將 first 指向 second，再將 second 指向原本 first 的下一個
             first.next = second
-            second.next = first_tmp_next
+            second.next = tmp1
             
-            first, second = first_tmp_next, second_tmp_next
-
+            # 指針推進
+            first = tmp1
+            second = tmp2
 ```
-
-**Dry Run 變數追蹤：**
-
-* **Input**: `1 -> 3 -> 5 -> 7 -> 9`
-* **中點後**: `first: 1->3->5->None`, `second: 9->7->None` (已反轉)
-* **合併 R1**: `1.next=9, 9.next=3`  `first=3, second=7`
-* **合併 R2**: `3.next=7, 7.next=5`  `first=5, second=None`
-* **結束**: `second` 結束，最後的 `5` 自動連在結尾。結果：`1->9->3->7->5`。
 
 ---
 
-### 5. Following up 延伸思考
+### 3. 實務應用場景
 
-* **[234. Palindrome Linked List](https://leetcode.com/problems/palindrome-linked-list/)**: 同樣使用「找中點+反轉」的抽象模組。
-* **[25. Reverse Nodes in k-Group](https://leetcode.com/problems/reverse-nodes-in-k-group/)**: 更複雜的局部反轉，需處理多組銜接。
-* **面試題變體**：如果串列長度極大（無法單機存儲），如何進行分佈式重排？
-* *答案*：先統計總長度，利用偏移量 (Offset) 將節點編號，再進行資料的分片重排。
+#### 1. 儲存設備的反向尋軌優化 (Elevator Algorithm in Disks)
+* **應用**：這種類似一前一後的來回掃瞄（頭-尾-頭-尾）邏輯，與傳統磁帶或磁碟 IO 讀寫時優化磁頭移動路徑的（例如 C-SCAN 的變形）概念有異曲同工之妙。
+
+#### 2. UI/元件渲染的交錯排列 (Interleaving Views)
+* **應用**：前端開發常常遇到要把兩個清單來源（例如「廣告推薦清單」與「自然搜尋結果」）一對一交錯渲染到畫面上，若來源是只能向前遍歷的串流 (Stream)，這類演算法提供很好的基礎抽象。
+
+---
+
+### 4. 總結筆記
+
+| 比較解說 | 陣列暫存法 | 三步拆解法 (In-place) |
+| --- | --- | --- |
+| **時間複雜度** | $O(N)$ | $O(N)$ (走訪共三次 $\sim3N$) |
+| **空間複雜度** | $O(N)$ | $O(1)$ |
+| **測驗主旨** | N/A | **中點**、**反轉**、**合併**的完美結合 |
+| **易錯細節** | 必須記得把陣列最後一個結點的 `next` 設為 Null。 | 忘記 `slow.next = None` 切斷中點，程式會陷入無窮迴圈。 |

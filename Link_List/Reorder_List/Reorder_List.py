@@ -1,30 +1,41 @@
+from typing import Optional
+
+# Definition for singly-linked list.
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
 class Solution:
     def reorderList(self, head: Optional[ListNode]) -> None:
-        if not head or not head.next: return
-
-        # 1. 找中點 (Fast pointer 從 head.next 開始，確保 slow 停在前半段結尾)
+        """
+        Do not return anything, modify head in-place instead.
+        """
+        if not head or not head.next:
+            return
+            
+        # 1. Find the middle of the linked list
         slow, fast = head, head.next
         while fast and fast.next:
             slow = slow.next
             fast = fast.next.next
-
-        # 2. 切斷與反轉 (物理意義：拔掉掛鉤，調轉車頭)
-        curr = slow.next
-        slow.next = None  # 重要！切斷前半段，防止環產生
+            
+        # 2. Reverse the second half
+        second = slow.next
+        slow.next = None
         prev = None
-        while curr:
-            next_tmp = curr.next
-            curr.next = prev
-            prev = curr
-            curr = next_tmp
         
-        # 3. 交錯合併 (while second 決定邊界)
+        while second:
+            tmp = second.next
+            second.next = prev
+            prev = second
+            second = tmp
+            
+        # 3. Merge the two halves
         first, second = head, prev
         while second:
-            first_tmp_next = first.next
-            second_tmp_next = second.next
-            
+            tmp1, tmp2 = first.next, second.next
             first.next = second
-            second.next = first_tmp_next
-            
-            first, second = first_tmp_next, second_tmp_next
+            second.next = tmp1
+            first = tmp1
+            second = tmp2

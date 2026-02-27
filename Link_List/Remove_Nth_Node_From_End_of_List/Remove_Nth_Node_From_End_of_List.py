@@ -1,20 +1,28 @@
-def removeNthFromEnd(head: ListNode, n: int) -> ListNode:
-    # 1. Dummy Node (哨兵節點)：處理刪除頭節點的 Edge Case
-    dummy = ListNode(0, head)
-    slow = fast = dummy
+from typing import Optional
 
-    # 2. 拉開間距：Fast 先跑 n+1 步
-    # 為什麼是 n+1？因為要讓 slow 停在「目標前驅節點」
-    for _ in range(n + 1):
-        fast = fast.next
+# Definition for singly-linked list.
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
 
-    # 3. 同步移動：直到 fast 觸底 (None)
-    while fast:
-        slow = slow.next
-        fast = fast.next
-
-    # 4. 執行刪除：語意化 Dry Run 驗證
-    # 假設 [1, 2], n=2，此時 slow 停在 dummy，slow.next 就是節點 1
-    slow.next = slow.next.next
-    
-    return dummy.next
+class Solution:
+    def removeNthFromEnd(self, head: Optional[ListNode], n: int) -> Optional[ListNode]:
+        # Two Pointers with Dummy Node: O(N) time, O(1) space (One pass)
+        dummy = ListNode(0, head)
+        fast = dummy
+        slow = dummy
+        
+        # Advance fast pointer by n steps
+        for _ in range(n):
+            fast = fast.next
+            
+        # Move both until fast reaches the last node
+        while fast.next:
+            slow = slow.next
+            fast = fast.next
+            
+        # Delete the nth node
+        slow.next = slow.next.next
+        
+        return dummy.next

@@ -1,26 +1,22 @@
-from collections import defaultdict
+from collections import deque
 
 class HitCounter:
+
     def __init__(self):
-        # bucket_id -> { timestamp -> count }
-        self.timemap = defaultdict(lambda: defaultdict(int))
+        # Using a deque to store timestamps of hits
+        self.hits = deque()
 
     def hit(self, timestamp: int) -> None:
-        bucket = timestamp // 300
-        self.timemap[bucket][timestamp] += 1
+        self.hits.append(timestamp)
 
     def getHits(self, timestamp: int) -> int:
-        bucket = timestamp // 300
-        # 主動清理機制：保留最近兩個區間，刪除其餘
-        for old_id in list(self.timemap.keys()):
-            if old_id < bucket - 1:
-                del self.timemap[old_id]
+        # Pop elements from the left of the deque that are older than 300 seconds
+        while self.hits and timestamp - self.hits[0] >= 300:
+            self.hits.popleft()
+            
+        return len(self.hits)
 
-        total = 0
-        # 遍歷當前與上一個桶子的 keys
-        for b_id in [bucket, bucket - 1]:
-            if b_id in self.timemap:
-                for t, cnt in self.timemap[b_id].items():
-                    if timestamp - t < 300:
-                        total += cnt
-        return total
+# Your HitCounter object will be instantiated and called as such:
+# obj = HitCounter()
+# obj.hit(timestamp)
+# param_2 = obj.getHits(timestamp)

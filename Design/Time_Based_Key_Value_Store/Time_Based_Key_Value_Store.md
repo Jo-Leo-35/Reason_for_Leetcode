@@ -1,104 +1,108 @@
-### LC 981. Time Based Key-Value Store 學習筆記
+### 1. 核心題意與挑戰
+
+設計一個基於時間的鍵值存儲系統 (Time-Based Key-Value Store)，該系統支援為同一鍵在不同時間戳記下存儲多個值。
+這代表除了 `key` 和 `value`，還有第三個維度：`timestamp`。
+實作兩個方法：
+1. `set(key, value, timestamp)`：儲存鍵 `key`、值 `value`，以及給定時間戳 `timestamp`。
+2. `get(key, timestamp)`：返回鍵 `key` 在之前時間（即 `prev_timestamp <= timestamp`）的最新值。如果在 `timestamp` 之前沒有對應的值，返回空字串 `""`。
+
+* **隱藏前提**：題目保證所有的 `set` 操作，其 `timestamp` 都是**嚴格遞增的**。也就是說寫入永遠都是往未來的時間寫，不會有「回溯寫入歷史」的情況發生。這點極其重要！
 
 ---
 
-#### 1. 題目敘述與抽象概念 (Description & Abstraction)
+### 2. 解法對比與完整程式碼
 
-*   **題目敘述**：
-    設計一個 Key-Value 儲存系統，支援兩個操作：
-    *   `set(key, value, timestamp)`: 在特定時間點 `timestamp` 儲存 `key` 的 `value`。
-    *   `get(key, timestamp)`: 回傳該 `key` 在 `timestamp` 當下或之前 (`prev_time <= timestamp`) 的最新 `value`。如果沒有對應時間點的值，回傳空字串 `""`。
+#### 唯一正解：雜湊表 + 二元搜尋 (HashMap + Binary Search)
 
-*   **抽象概念 (The "Aha!" Moment)**：
-    這題其實是在考 **「多版本控制 (Multi-Version)」** 的資料結構。你可以把它想像成一個 「股票價格查詢系統」 或 「Git 版本控制」：
-    如果我在 $t=1$ 存了 "A"，$t=4$ 存了 "B"。查詢 $t=3$ 時，因為 $t=3$ 沒有變動，狀態應該延續 $t=1$ 的 "A"。
-    這在數學上等於尋找 **Floor Key** (小於等於目標值的最大值)。
+**思路**：
+因為寫入的時間戳一定是**遞增的**，所以如果我們把同一個 `key` 的所有 `(timestamp, value)` 存成一個 Python `List`，這個 List 自然而然就已經是**按照時間排序好**的陣列了！
+這太棒了，看到「已經排序好的陣列」加上「尋找小於等於目標的最大值」，這明顯就是為 **Binary Search (二元搜尋)** 量身打造的場景。
 
-*   **題型標籤 (Tags)**：`Hash Map`, `Binary Search`, `Design`
+* **資料結構設計**：
+  使用 `collections.defaultdict(list)`。
+  結構長這樣：`store["foo"] = [(1, "bar"), (4, "bar2"), (5, "bar3")]`
 
----
+* **`set` 實作**：
+  直接 `store[key].append((timestamp, value))`。時間複雜度 $O(1)$。
 
-#### 2. 算法比較 (Algorithm Comparison)
+* **`get` 實作**：
+  拿到該 `key` 的陣列。用二元搜尋尋找 `timestamp`。
+  如果找到完全匹配的，太好了直接回傳。
+  如果沒找到，我們必須回傳**最後一個比 `timestamp` 小**的那個記錄。
 
-這題的關鍵在於如何快速找到「過去最近的時間點」。
-
-| 方法 | Set 時間複雜度 | Get 時間複雜度 | 空間複雜度 | 適用場景 | 備註 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **暴力解 (Linear Scan)** | $O(1)$ | $O(N)$ | $O(N)$ | $N$ 很小時 | 每次 get 都從頭掃描，隨著歷史資料增加會變慢 (TLE)。 |
-| **Google Standard (Hash Map + BS)** | $O(1)$ | $O(\log N)$ | $O(N)$ | 一般面試推薦 | 利用題目特性 (timestamp 遞增)，存入即有序，可用二分搜。 |
-| **平衡二元樹 (TreeMap / BST)** | $O(\log N)$ | $O(\log N)$ | $O(N)$ | Timestamp 亂序時 | 如果 set 的時間不是遞增的，這是最佳解 (Java/C++ 常用)。 |
-
-*(註：$N$ 是該 Key 累積的歷史資料筆數。)*
-
----
-
-#### 3. Python 實作細節
-
-這展示了 Python 3.10+ 最優雅的寫法，使用了 `bisect` 模組的 `key` 參數，不需要手寫二分搜，也不需要構造假資料。
+* **空間複雜度**：$O(N)$，儲存所有的 Set 請求。
 
 ```python
-import collections
+from collections import defaultdict
 import bisect
 
 class TimeMap:
+
     def __init__(self):
-        self.store = collections.defaultdict(list)
+        # 初始化字典，裡面存 tuple(timestamp, value) 的陣列
+        self.store = defaultdict(list)
 
     def set(self, key: str, value: str, timestamp: int) -> None:
-        # 題目保證: timestamp 嚴格遞增
-        self.store[key].append([timestamp, value])
+        self.store[key].append((timestamp, value))
 
     def get(self, key: str, timestamp: int) -> str:
         if key not in self.store:
             return ""
-        
+            
         values = self.store[key]
-        # Binary Search (Upper Bound)
-        # 尋找第一個 "大於" timestamp 的位置
-        i = bisect.bisect_right(values, timestamp, key=lambda x: x[0])
         
-        if i == 0:
+        # 邊界處理：如果要求尋找的時間比我們歷史上最早的一筆還要小，代表那時候根本沒這東西
+        if timestamp < values[0][0]:
             return ""
+            
+        # 使用二元搜尋找尋 insertion point
+        # 在 Python 中，bisect 是基於 Tuple 的第一個元素來比較的
+        # 為了要比大小，我們故意偽造一個 tuple
+        # bisect_right 會找到「第一個嚴格大於目標值」的位置
+        idx = bisect.bisect_right(values, (timestamp, chr(127)))
         
-        return values[i - 1][1]
+        # 既然 idx 是第一個大於目標的，那 idx - 1 就是這期間最新的這筆！
+        return values[idx - 1][1]
+        
+        ''' 
+        如果不熟悉 bisect，手刻 Binary Search 的版本：
+        left, right = 0, len(values) - 1
+        res = ""
+        while left <= right:
+            mid = left + (right - left) // 2
+            if values[mid][0] == timestamp:
+                return values[mid][1]
+            elif values[mid][0] < timestamp:
+                res = values[mid][1]
+                left = mid + 1
+            else:
+                right = mid - 1
+        return res
+        '''
+
+# Your TimeMap object will be instantiated and called as such:
+# obj = TimeMap()
+# obj.set(key,value,timestamp)
+# param_2 = obj.get(key,timestamp)
 ```
 
 ---
 
-#### 4. 微系統設計應用 (Micro-System Design)
+### 3. 實務應用場景
 
-在真實的系統設計面試中，這題的核心概念可以用在什麼地方？
+本題就是**時序型資料庫 (Time-Series Database, TSDB)** 的超級微縮版原型。
 
-*   **MVCC (Multi-Version Concurrency Control) 資料庫**:
-    像 PostgreSQL 或 MySQL (InnoDB) 為了支援高併發讀寫，會保留資料的舊版本。當一個事務 (Transaction) 在時間 $T$ 開始讀取時，它只能看到時間 $T$ 之前的資料快照 (Snapshot)，這就是 `get(key, T)` 的邏輯。
-*   **配置管理中心 (Configuration Management)**:
-    系統設定檔可能會隨時間改變。維運人員可能會問：「昨天下午 2:00 的時候，伺服器的 `Max_Connection` 設定是多少？」這需要一個 Time-Based KV Store 來回溯歷史設定。
-*   **股票 K 線圖 (Time Series Data)**:
-    雖然通常用專門的 Time Series DB (如 InfluxDB)，但核心邏輯一樣：「給我這支股票在 10:05:30 之前的最後一筆成交價」。
+#### 1. 監控系統與度量引擎 (Metrics Engine - Prometheus / Grafana)
+* **應用**：蒐集伺服器 CPU 使用率。當用戶在前端畫圖表時拉了一條 X 軸，你必須回傳每一秒的狀態，即便那一秒系統沒有主動回報數字，你也必須透過 Binary Search 往前回推拿到上一筆最近的採樣資料。
 
----
-
-#### 5. Follow-up Questions (面試延伸題)
-
-*   **Q1: 如果 set 操作中的 timestamp 不是遞增的，怎麼辦？**
-    *   **回答**: 目前的 `append` 寫法會失效 (List 變無序)。
-    *   **解法 A (Read-Heavy)**: 在 set 時使用 `bisect.insort` 插入到正確位置，保持 List 有序。set 變 $O(N)$，get 保持 $O(\log N)$。
-    *   **解法 B (Write-Heavy)**: set 直接 `append` ($O(1)$)，但在 get 時檢查是否 sorted，若否則 sort ($O(N \log N)$)。
-    *   **解法 C (Balanced)**: 改用 Java 的 `TreeMap` 或 C++ `std::map` (Balanced BST)，set 和 get 都是 $O(\log N)$。
-
-*   **Q2: 如果歷史資料非常多，記憶體放不下怎麼辦？ (System Design)**
-    *   **回答**: 
-        *   **清理舊資料 (Retention Policy)**: 只保留最近 N 天的資料，舊的刪除或歸檔到冷儲存 (S3)。
-        *   **分散式儲存 (Sharding)**: 根據 Key 做 Consistent Hashing，把資料分散到多台機器上。
-        *   **LSM Tree (Log-Structured Merge-tree)**: 這是 NoSQL (如 Cassandra, RocksDB) 的底層結構，非常適合寫入多、且需要按時間查詢的場景。
-
-*   **Q3: 為什麼選擇 bisect_right 而不是 bisect_left？**
-    *   **回答**: 題目要求的是 `prev_time <= timestamp`。`bisect_right` 會回傳「大於 timestamp 的第一個位置」。該位置的 **前一個 (index-1)** 正好就是「小於等於 timestamp 的最大值」。如果用 `bisect_left`，當遇到重複 timestamp 或精確命中時，邏輯處理會比較複雜。
+#### 2. 遊戲伺服器的狀態回滾防作弊 (Lag Compensation in FPS Games)
+* **應用**：在《CS:GO》或《Apex》這種射擊遊戲中，伺服器必須保存所有玩家過去 1 秒鐘內每 0.01 秒的物理坐標。當玩家 A 送出「我在 t=150 毫秒時開槍打中玩家 B」的封包時，伺服器必須調閱歷史記錄 `get(PlayerB, 150)` 來重現 150 毫秒那瞬間 B 的位置，這就是嚴格的時間軸調閱機制。
 
 ---
 
-#### 🌟 總結 (Key Takeaways)
+### 4. 總結筆記
 
-1.  **有序性是關鍵**：利用 timestamp 遞增的特性，把問題轉化為 Binary Search。
-2.  **API 熟練度**：在 Python 中，`bisect` 是處理有序陣列的神器，搭配 `key` 參數可處理複雜物件。
-3.  **邊界處理**：永遠記得檢查 `i == 0` (找不到更早的時間) 的情況。
+| | 解說 |
+| --- | --- |
+| **Why not Dict of Dicts?** | 如果寫 `store["foo"][150] = "bar"`，雖然 $O(1)$。但當有人查 `151` 甚至 `200` 時，你無法輕鬆找到離他最近的前面那筆，因為 HashMap 的 Key 是無序的。只能用排序 Array 幫忙。 |
+| **`bisect_right` 與 Fake Tuple** | 為了相容 tuple comparison，必須構造一個 `(timestamp, 非常大的字元)` 以確保二分搜順利推進到最右邊。如果是面試，建議寫下方註解裡**手刻的 Binary Search** 會顯得更能掌握細節。 |

@@ -11,7 +11,6 @@ class Solution:
         heapq.heappush(heap, intervals[0][1]) # 紀錄最早的結束時間
 
        
-
         for i in range(1, len(intervals)):
 
             if intervals[i][0] >= heap[0]:
